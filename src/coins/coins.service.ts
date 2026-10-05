@@ -1,0 +1,281 @@
+import {
+  Injectable,
+  Inject,
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { DRIZZLE } from '../db/database.module';
+import { LibSQLDatabase } from 'drizzle-orm/libsql';
+import * as schema from '../db/schema';
+import { eq, and, sql, desc } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
+import { UsersService } from '../users/users.service';
+
+const MONTHLY_COIN_ALLOWANCE = 5000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const DEFAULT_FEATURE_PRICES: Record<string, number> = {
+  ai_summary: 5,
+  question_explanation: 5,
+  study_flashcard: 5,
+  magical_tutor: 5,
+  pdf_scan_summary: 10,
+};
+
+@Injectable()
+export class CoinsService {
+  private readonly logger = new Logger(CoinsService.name);
+
+  constructor(
+    @Inject(DRIZZLE) private readonly db: LibSQLDatabase<typeof schema>,
+    private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  public validateS2sApiKey(apiKey?: string) {
+    const expectedSecret =
+      this.configService.get<string>('AURIKREX_CENTRAL_S2S_SECRET') ||
+      'aurikrex-s2s-master-key-2026';
+    if (!apiKey || apiKey !== expectedSecret) {
+      throw new ForbiddenException('Invalid or missing Server-to-Server API Key');
+    }
+  }
+
+  public async checkAndResetMonthlyCoins(userId: string) {
+    const wallets = await this.db
+      .select()
+      .from(schema.auriCoinWallets)
+      .where(eq(schema.auriCoinWallets.user_id, userId))
+      .limit(1);
+
+    const now = new Date();
+
+    if (!wallets.length) {
+      const nextReset = new Date(now.getTime() + THIRTY_DAYS_MS);
+      await this.db.insert(schema.auriCoinWallets).values({
+        user_id: userId,
+        balance: MONTHLY_COIN_ALLOWANCE,
+        monthly_allowance: MONTHLY_COIN_ALLOWANCE,
+        last_reset_date: now,
+        next_reset_date: nextReset,
+        updatedAt: now,
+      } as any);
+
+      return {
+        user_id: userId,
+        balance: MONTHLY_COIN_ALLOWANCE,
+        monthly_allowance: MONTHLY_COIN_ALLOWANCE,
+        last_reset_date: now,
+        next_reset_date: nextReset,
+        updatedAt: now,
+      };
+    }
+
+    const wallet = wallets[0];
+    const nextResetDate = new Date(wallet.next_reset_date);
+
+    if (now >= nextResetDate) {
+      const newNextReset = new Date(now.getTime() + THIRTY_DAYS_MS);
+      this.logger.log(`Performing 30-day monthly AuriCoin refill for user ${userId}`);
+
+      await this.db
+        .update(schema.auriCoinWallets)
+        .set({
+          balance: MONTHLY_COIN_ALLOWANCE,
+          last_reset_date: now,
+          next_reset_date: newNextReset,
+          updatedAt: now,
+        } as any)
+        .where(eq(schema.auriCoinWallets.user_id, userId));
+
+      await this.db.insert(schema.auriCoinLedger).values({
+        id: uuidv4(),
+        user_id: userId,
+        app_id: 'central',
+        feature_name: 'monthly_30day_refill',
+        amount: MONTHLY_COIN_ALLOWANCE,
+        balance_after: MONTHLY_COIN_ALLOWANCE,
+        idempotency_key: `refill_${userId}_${now.toISOString().slice(0, 10)}`,
+        metadata: null,
+        createdAt: now,
+      } as any);
+
+      return {
+        user_id: userId,
+        balance: MONTHLY_COIN_ALLOWANCE,
+        monthly_allowance: MONTHLY_COIN_ALLOWANCE,
+        last_reset_date: now,
+        next_reset_date: newNextReset,
+        updatedAt: now,
+      };
+    }
+
+    return wallet;
+  }
+
+  public async getBalance(userIdOrAurikrexId: string) {
+    let user: any = null;
+    if (userIdOrAurikrexId.startsWith('AKX-')) {
+      user = await this.usersService.findByAurikrexId(userIdOrAurikrexId).catch(() => null);
+    } else {
+      user = await this.usersService.findById(userIdOrAurikrexId).catch(() => null);
+    }
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const wallet = await this.checkAndResetMonthlyCoins(user.id);
+    return {
+      balance: wallet.balance,
+      monthlyAllowance: MONTHLY_COIN_ALLOWANCE,
+      costPerRequest: 5,
+      lastResetDate: wallet.last_reset_date,
+      nextResetDate: wallet.next_reset_date,
+    };
+  }
+
+  public async deductCoins(params: {
+    userIdOrAurikrexId: string;
+    appId: string;
+    featureName: string;
+    idempotencyKey?: string;
+    s2sApiKey?: string;
+  }) {
+    this.validateS2sApiKey(params.s2sApiKey);
+
+    let user: any = null;
+    if (params.userIdOrAurikrexId.startsWith('AKX-')) {
+      user = await this.usersService.findByAurikrexId(params.userIdOrAurikrexId);
+    } else {
+      user = await this.usersService.findById(params.userIdOrAurikrexId);
+    }
+
+    const userId = user.id;
+
+    if (params.idempotencyKey) {
+      const existingTx = await this.db
+        .select()
+        .from(schema.auriCoinLedger)
+        .where(eq(schema.auriCoinLedger.idempotency_key, params.idempotencyKey))
+        .limit(1);
+
+      if (existingTx.length > 0) {
+        const tx = existingTx[0];
+        const wallet = await this.checkAndResetMonthlyCoins(userId);
+        return {
+          success: true,
+          remainingCoins: tx.balance_after,
+          deductedCoins: Math.abs(tx.amount),
+          transactionId: tx.id,
+          idempotent: true,
+        };
+      }
+    }
+
+    const cost = DEFAULT_FEATURE_PRICES[params.featureName] || 5;
+    const wallet = await this.checkAndResetMonthlyCoins(userId);
+
+    if (wallet.balance < cost) {
+      throw new ForbiddenException({
+        code: 'OUT_OF_COINS',
+        message: 'You have used all 5,000 Auri Coins for this month.',
+        currentBalance: wallet.balance,
+        requiredCoins: cost,
+        nextResetDate: wallet.next_reset_date,
+      });
+    }
+
+    const newBalance = wallet.balance - cost;
+    const now = new Date();
+
+    await this.db
+      .update(schema.auriCoinWallets)
+      .set({ balance: newBalance, updatedAt: now } as any)
+      .where(
+        and(
+          eq(schema.auriCoinWallets.user_id, userId),
+          sql`balance >= ${cost}`,
+        ),
+      );
+
+    const transactionId = uuidv4();
+    await this.db.insert(schema.auriCoinLedger).values({
+      id: transactionId,
+      user_id: userId,
+      app_id: params.appId,
+      feature_name: params.featureName,
+      amount: -cost,
+      balance_after: newBalance,
+      idempotency_key: params.idempotencyKey || null,
+      metadata: null,
+      createdAt: now,
+    } as any);
+
+    return {
+      success: true,
+      remainingCoins: newBalance,
+      deductedCoins: cost,
+      transactionId,
+      nextResetDate: wallet.next_reset_date,
+    };
+  }
+
+  public async refundCoins(params: {
+    transactionId: string;
+    userId: string;
+    reason?: string;
+    s2sApiKey?: string;
+  }) {
+    this.validateS2sApiKey(params.s2sApiKey);
+
+    const txs = await this.db
+      .select()
+      .from(schema.auriCoinLedger)
+      .where(eq(schema.auriCoinLedger.id, params.transactionId))
+      .limit(1);
+
+    if (!txs.length) throw new NotFoundException('Original transaction not found');
+    const origTx = txs[0];
+
+    const refundAmount = Math.abs(origTx.amount);
+    const wallet = await this.checkAndResetMonthlyCoins(origTx.user_id);
+    const newBalance = wallet.balance + refundAmount;
+    const now = new Date();
+
+    await this.db
+      .update(schema.auriCoinWallets)
+      .set({ balance: newBalance, updatedAt: now } as any)
+      .where(eq(schema.auriCoinWallets.user_id, origTx.user_id));
+
+    const refundTxId = uuidv4();
+    await this.db.insert(schema.auriCoinLedger).values({
+      id: refundTxId,
+      user_id: origTx.user_id,
+      app_id: origTx.app_id,
+      feature_name: `${origTx.feature_name}_refund`,
+      amount: refundAmount,
+      balance_after: newBalance,
+      idempotency_key: `refund_${params.transactionId}`,
+      metadata: JSON.stringify({ reason: params.reason || 'AI_PROVIDER_ERROR' }),
+      createdAt: now,
+    } as any);
+
+    return {
+      success: true,
+      refundedCoins: refundAmount,
+      remainingCoins: newBalance,
+      refundTransactionId: refundTxId,
+    };
+  }
+
+  public async getCoinsHistory(userId: string, limit: number = 20) {
+    return this.db
+      .select()
+      .from(schema.auriCoinLedger)
+      .where(eq(schema.auriCoinLedger.user_id, userId))
+      .orderBy(desc(schema.auriCoinLedger.createdAt))
+      .limit(limit);
+  }
+}
