@@ -5,7 +5,7 @@
   "description": "Aurikrex Ecosystem Central Core Microservice: Identity, OAuth2 SSO, AuriCoin Virtual Economy Engine & Shared Knowledge Base",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "start:dev": "tsx watch src/main.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"
