@@ -233,7 +233,12 @@ export class CoinsService {
     const txs = await this.db
       .select()
       .from(schema.auriCoinLedger)
-      .where(eq(schema.auriCoinLedger.id, params.transactionId))
+      .where(
+        or(
+          eq(schema.auriCoinLedger.id, params.transactionId),
+          eq(schema.auriCoinLedger.idempotency_key, params.transactionId),
+        ),
+      )
       .limit(1);
 
     if (!txs.length) throw new NotFoundException('Original transaction not found');
