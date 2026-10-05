@@ -32,6 +32,29 @@ export class AuthController {
     return this.usersService.createUser({ email, password, fullName, role });
   }
 
+  @Post('sync-user')
+  async syncUser(
+    @Body('email') email: string,
+    @Body('passwordHash') passwordHash: string,
+    @Body('fullName') fullName: string,
+    @Body('aurikrexId') aurikrexId?: string,
+    @Body('role') role?: string,
+    @Body('mfaSecret') mfaSecret?: string,
+    @Body('mfaEnabled') mfaEnabled?: boolean,
+    @Headers('x-central-api-key') s2sApiKey?: string,
+  ) {
+    return this.usersService.syncExistingUser({
+      email,
+      passwordHash,
+      fullName,
+      aurikrexId,
+      role,
+      mfaSecret,
+      mfaEnabled,
+      s2sApiKey,
+    });
+  }
+
   @Post('login')
   async login(
     @Body('email') email: string,

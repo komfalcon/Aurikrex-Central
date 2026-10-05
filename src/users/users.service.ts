@@ -7,10 +7,13 @@ import { v4 as uuidv4 } from 'uuid';
 import * as argon2 from 'argon2';
 import { randomInt } from 'crypto';
 
+import { ConfigService } from '@nestjs/config';
+
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: LibSQLDatabase<typeof schema>,
+    private readonly configService: ConfigService,
   ) {}
 
   public generateAurikrexId(): string {
@@ -89,6 +92,80 @@ export class UsersService {
       amount: 5000,
       balance_after: 5000,
       idempotency_key: `initial_${userId}`,
+      createdAt: now,
+    } as any);
+
+    return this.findById(userId);
+  }
+
+  public async syncExistingUser(data: {
+    email: string;
+    passwordHash: string;
+    fullName: string;
+    aurikrexId?: string;
+    role?: string;
+    mfaSecret?: string;
+    mfaEnabled?: boolean;
+    s2sApiKey?: string;
+  }) {
+    const expectedSecret =
+      this.configService?.get<string>('AURIKREX_CENTRAL_S2S_SECRET') ||
+      'aurikrex-s2s-master-key-2026';
+    if (data.s2sApiKey && data.s2sApiKey !== expectedSecret) {
+      throw new ConflictException('Invalid Server-to-Server API Key');
+    }
+
+    const normalizedEmail = data.email.toLowerCase().trim();
+    const existing = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, normalizedEmail))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const u = existing[0];
+      const { passwordHash, mfa_secret, ...safeUser } = u;
+      return safeUser;
+    }
+
+    const userId = uuidv4();
+    const aurikrexId = data.aurikrexId || this.generateAurikrexId();
+    const now = new Date();
+
+    await this.db.insert(schema.users).values({
+      id: userId,
+      aurikrex_id: aurikrexId,
+      email: normalizedEmail,
+      fullName: data.fullName,
+      passwordHash: data.passwordHash,
+      role: data.role || 'student',
+      mfa_secret: data.mfaSecret || null,
+      mfa_enabled: data.mfaEnabled || false,
+      account_status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const nextReset = new Date(now.getTime() + thirtyDaysMs);
+
+    await this.db.insert(schema.auriCoinWallets).values({
+      user_id: userId,
+      balance: 5000,
+      monthly_allowance: 5000,
+      last_reset_date: now,
+      next_reset_date: nextReset,
+      updatedAt: now,
+    } as any);
+
+    await this.db.insert(schema.auriCoinLedger).values({
+      id: uuidv4(),
+      user_id: userId,
+      app_id: 'central',
+      feature_name: 'migrated_initial_monthly_allowance',
+      amount: 5000,
+      balance_after: 5000,
+      idempotency_key: `migrated_${userId}`,
       createdAt: now,
     } as any);
 

@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { DRIZZLE } from '../db/database.module';
 import { LibSQLDatabase } from 'drizzle-orm/libsql';
 import * as schema from '../db/schema';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 
