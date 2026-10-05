@@ -19,8 +19,8 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT || 4000;
-  await app.listen(port);
-  logger.log(`🏛️ Aurikrex Central Core Microservice is running on port ${port}`);
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
+  logger.log(`🏛️ Aurikrex Central Core Microservice is running on port ${port} (0.0.0.0)`);
 }
 bootstrap();
