@@ -5,12 +5,8 @@ import { eq } from 'drizzle-orm';
 import * as argon2 from 'argon2';
 import { v4 as uuidv4 } from 'uuid';
 import * as dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import path from 'path';
+dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const url = process.env.TURSO_DATABASE_URL;
 const token = process.env.TURSO_AUTH_TOKEN;
