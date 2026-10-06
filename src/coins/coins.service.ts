@@ -118,10 +118,17 @@ export class CoinsService {
 
   public async getBalance(userIdOrAurikrexId: string) {
     let user: any = null;
-    if (userIdOrAurikrexId.startsWith('AKX-')) {
+    if (userIdOrAurikrexId.startsWith('AKX-') || userIdOrAurikrexId.startsWith('ax_')) {
       user = await this.usersService.findByAurikrexId(userIdOrAurikrexId).catch(() => null);
-    } else {
+    }
+    if (!user) {
       user = await this.usersService.findById(userIdOrAurikrexId).catch(() => null);
+    }
+    if (!user) {
+      user = await this.usersService.findByAurikrexId(userIdOrAurikrexId).catch(() => null);
+    }
+    if (!user && userIdOrAurikrexId.includes('@')) {
+      user = await this.usersService.findByEmail(userIdOrAurikrexId).catch(() => null);
     }
 
     if (!user) throw new NotFoundException('User not found');
@@ -146,11 +153,20 @@ export class CoinsService {
     this.validateS2sApiKey(params.s2sApiKey);
 
     let user: any = null;
-    if (params.userIdOrAurikrexId.startsWith('AKX-')) {
-      user = await this.usersService.findByAurikrexId(params.userIdOrAurikrexId);
-    } else {
-      user = await this.usersService.findById(params.userIdOrAurikrexId);
+    if (params.userIdOrAurikrexId.startsWith('AKX-') || params.userIdOrAurikrexId.startsWith('ax_')) {
+      user = await this.usersService.findByAurikrexId(params.userIdOrAurikrexId).catch(() => null);
     }
+    if (!user) {
+      user = await this.usersService.findById(params.userIdOrAurikrexId).catch(() => null);
+    }
+    if (!user) {
+      user = await this.usersService.findByAurikrexId(params.userIdOrAurikrexId).catch(() => null);
+    }
+    if (!user && params.userIdOrAurikrexId.includes('@')) {
+      user = await this.usersService.findByEmail(params.userIdOrAurikrexId).catch(() => null);
+    }
+
+    if (!user) throw new NotFoundException('User not found');
 
     const userId = user.id;
 
