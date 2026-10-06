@@ -109,11 +109,11 @@ export class UsersService {
     s2sApiKey?: string;
   }) {
     const expectedSecret =
-      this.configService?.get<string>('AURIKREX_CENTRAL_S2S_SECRET') ||
-      'aurikrex-s2s-master-key-2026';
-    if (data.s2sApiKey && data.s2sApiKey !== expectedSecret) {
+      this.configService?.get<string>('AURIKREX_CENTRAL_S2S_SECRET') || '';
+    if (data.s2sApiKey && (!expectedSecret || data.s2sApiKey !== expectedSecret)) {
       throw new ConflictException('Invalid Server-to-Server API Key');
     }
+
 
     const normalizedEmail = data.email.toLowerCase().trim();
     const existing = await this.db

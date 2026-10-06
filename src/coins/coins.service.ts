@@ -37,12 +37,12 @@ export class CoinsService {
 
   public validateS2sApiKey(apiKey?: string) {
     const expectedSecret =
-      this.configService.get<string>('AURIKREX_CENTRAL_S2S_SECRET') ||
-      'aurikrex-s2s-master-key-2026';
-    if (!apiKey || apiKey !== expectedSecret) {
+      this.configService.get<string>('AURIKREX_CENTRAL_S2S_SECRET') || '';
+    if (!expectedSecret || !apiKey || apiKey !== expectedSecret) {
       throw new ForbiddenException('Invalid or missing Server-to-Server API Key');
     }
   }
+
 
   public async checkAndResetMonthlyCoins(userId: string) {
     const wallets = await this.db
