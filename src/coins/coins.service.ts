@@ -14,7 +14,7 @@ import { eq, and, or, sql, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 
-const MONTHLY_COIN_ALLOWANCE = 5000;
+const MONTHLY_COIN_ALLOWANCE = 2500;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_FEATURE_PRICES: Record<string, number> = {

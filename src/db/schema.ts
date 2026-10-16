@@ -75,8 +75,8 @@ export const ssoRefreshTokens = sqliteTable('sso_refresh_tokens', {
 // 5. AURI COIN WALLETS
 export const auriCoinWallets = sqliteTable('auri_coin_wallets', {
   user_id: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
-  balance: integer('balance').notNull().$default(() => 5000),
-  monthly_allowance: integer('monthly_allowance').notNull().$default(() => 5000),
+  balance: integer('balance').notNull().$default(() => 2500),
+  monthly_allowance: integer('monthly_allowance').notNull().$default(() => 2500),
   last_reset_date: integer('last_reset_date', { mode: 'timestamp' }).notNull().$default(() => new Date()),
   next_reset_date: integer('next_reset_date', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),

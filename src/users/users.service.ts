@@ -71,14 +71,14 @@ export class UsersService {
       updatedAt: now,
     } as any);
 
-    // Initialize 5,000 AuriCoins Wallet
+    // Initialize 2,500 AuriCoins Wallet
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
     const nextReset = new Date(now.getTime() + thirtyDaysMs);
 
     await this.db.insert(schema.auriCoinWallets).values({
       user_id: userId,
-      balance: 5000,
-      monthly_allowance: 5000,
+      balance: 2500,
+      monthly_allowance: 2500,
       last_reset_date: now,
       next_reset_date: nextReset,
       updatedAt: now,
@@ -89,8 +89,8 @@ export class UsersService {
       user_id: userId,
       app_id: 'central',
       feature_name: 'initial_monthly_allowance',
-      amount: 5000,
-      balance_after: 5000,
+      amount: 2500,
+      balance_after: 2500,
       idempotency_key: `initial_${userId}`,
       createdAt: now,
     } as any);
@@ -151,8 +151,8 @@ export class UsersService {
 
     await this.db.insert(schema.auriCoinWallets).values({
       user_id: userId,
-      balance: 5000,
-      monthly_allowance: 5000,
+      balance: 2500,
+      monthly_allowance: 2500,
       last_reset_date: now,
       next_reset_date: nextReset,
       updatedAt: now,
@@ -163,8 +163,8 @@ export class UsersService {
       user_id: userId,
       app_id: 'central',
       feature_name: 'migrated_initial_monthly_allowance',
-      amount: 5000,
-      balance_after: 5000,
+      amount: 2500,
+      balance_after: 2500,
       idempotency_key: `migrated_${userId}`,
       createdAt: now,
     } as any);
