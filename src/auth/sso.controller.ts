@@ -13,6 +13,8 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 
+import * as jwt from 'jsonwebtoken';
+
 @Controller(['auth/sso', 'api/v1/auth/sso', 'api/v1/sso'])
 export class SsoController {
   constructor(
@@ -39,18 +41,25 @@ export class SsoController {
     let userId: string | null = null;
     if (queryToken) {
       try {
-        const user = await this.usersService.findByAurikrexId(queryToken).catch(() => null);
+        let identifier = queryToken.trim();
+        if (identifier.startsWith('eyJ')) {
+          const decoded: any = jwt.decode(identifier);
+          if (decoded) {
+            identifier = decoded.sub || decoded.aurikrex_id || decoded.user_id || decoded.email || identifier;
+          }
+        }
+        let user = await this.usersService.findByAurikrexId(identifier).catch(() => null);
+        if (!user) user = await this.usersService.findById(identifier).catch(() => null);
+        if (!user && identifier.includes('@')) user = await this.usersService.findByEmail(identifier).catch(() => null);
         if (user) userId = user.id;
       } catch {}
     }
 
     if (!userId) {
-      // Dynamic origin redirect to login page
-      const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
-      const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-      const reqOrigin = host ? `${protocol}://${host}` : 'https://cbt.aurikrex.com';
+      // Dynamic origin redirect to central login portal (CBT)
+      const loginBase = (process.env.CBT_ORIGIN || 'https://cbt.aurikrex.com').replace(/\/+$/, '');
       const returnUrl = encodeURIComponent(req.originalUrl || req.url);
-      return res.redirect(`${reqOrigin}/auth?returnUrl=${returnUrl}`);
+      return res.redirect(`${loginBase}/auth?returnUrl=${returnUrl}`);
     }
 
     const code = await this.authService.generateAuthCode({
