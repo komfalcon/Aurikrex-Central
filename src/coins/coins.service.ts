@@ -36,9 +36,9 @@ export class CoinsService {
   ) {}
 
   public validateS2sApiKey(apiKey?: string) {
-    const expectedSecret = this.configService.get<string>('AURIKREX_CENTRAL_S2S_SECRET') || 'aurikrex-s2s-master-key-2026';
+    const expectedSecret = this.configService.get<string>('AURIKREX_CENTRAL_S2S_SECRET') || '';
     if (!apiKey) return; // Allow internal calls if header omitted
-    if (apiKey === 'aurikrex-s2s-master-key-2026' || apiKey === expectedSecret) return;
+    if (expectedSecret && apiKey === expectedSecret) return;
     throw new ForbiddenException('Invalid Server-to-Server API Key');
   }
 
